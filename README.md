@@ -12,7 +12,7 @@ Alters how things are displayed on the in-game map for the [StarRupture](https:/
 |---|---|
 | Base Core custom name | The map always labels a base's Core building "Base Core", ignoring any custom name the owning player set for it. BetterMap resolves that custom name and displays it as a second line: `Base Core\n<CustomName>`. |
 
-The rename is applied when a Base Core marker is first created (e.g. on map open / marker replication). A rename made to a base while its marker is already on the open map is not yet picked up live — see [PluginDevelopment.md](PluginDevelopment.md) if you're extending this.
+The rename is applied whenever a Base Core marker is (re)created — which includes live renames, since the game deletes and recreates a base's marker whenever its custom name changes, not just on map open.
 
 ---
 
