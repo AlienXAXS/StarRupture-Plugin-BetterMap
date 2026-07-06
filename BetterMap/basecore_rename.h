@@ -110,21 +110,11 @@ namespace BetterMap::BaseCoreRename
 
 						if (customName.Num() > 0)
 						{
-							// "Base Core\n<CustomName>" -- untested whether the widget's text
-							// rendering honors embedded newlines, worth trying.
-							std::wstring combined = L"Base Core\n" + customName.ToWString();
-							LOG_TRACE("[BetterMap] CreateBuildingMarkerDetour: combined display name='%ls'", combined.c_str());
-
-							// FString's wchar_t* ctor wraps the buffer rather than copying it,
-							// so `combined` must outlive this FString -- both stay in scope
-							// through the Conv_StringToText call below.
-							SDK::FString combinedName(combined.c_str());
-
 							// Conv_StringToText round-trips through UObject::ProcessEvent (the real
 							// engine reflection call), so the returned FText owns a freshly-created,
 							// correctly-refcounted ITextData -- safe to hand off below without us
 							// having to replicate the engine's AddRef/Release bookkeeping ourselves.
-							SDK::FText newText = SDK::UKismetTextLibrary::Conv_StringToText(combinedName);
+							SDK::FText newText = SDK::UKismetTextLibrary::Conv_StringToText(customName);
 
 							// Overwrite in place; CreateBuildingMarker's own (unmodified) code below
 							// will AddRef this into the marker widget correctly. This does leak the
@@ -133,7 +123,7 @@ namespace BetterMap::BaseCoreRename
 							// creation, not a correctness/crash risk.
 							const_cast<SDK::FBuildingMarkerDataFastArrayItem*>(Data)->BuildingName = newText;
 
-							LOG_INFO("[BetterMap] Renamed Base Core map marker to 'Base Core\\n<custom name>' (custom name length=%d)", customName.Num());
+							LOG_INFO("[BetterMap] Renamed Base Core map marker to custom name (length=%d)", customName.Num());
 						}
 						else
 						{
