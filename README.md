@@ -1,78 +1,63 @@
-# StarRupture Plugin SDK
+# BetterMap — StarRupture Client Plugin
 
-Everything you need to build plugins for the [StarRupture ModLoader](https://github.com/AlienXAXS/StarRupture-ModLoader) — without forking or building the modloader itself.
+Alters how things are displayed on the in-game map for the [StarRupture](https://store.steampowered.com/app/1631270/StarRupture/) [ModLoader](https://github.com/AlienXAXS/StarRupture-ModLoader), by hooking the game's own map UI functions rather than patching assets.
 
-## What's in this repo
+**Target:** Game client only
 
-| Path | Description |
+---
+
+## What It Does
+
+| Feature | Description |
 |---|---|
-| `include/plugin_interface.h` | The full plugin API — interfaces, callbacks, enums |
-| `include/plugin_network_helpers.h` | Typed helpers for sending and receiving network packets |
-| `ExamplePlugin/` | Minimal starter plugin — copy, rename, and go |
-| `StarRupture SDK/` | Dumper-7 generated UE5 SDK headers (Client + Server + Generic) |
-| `Shared.props` | MSBuild properties for SDK paths and build configs |
-| `PluginDevelopment.md` | Full API reference and developer guide |
+| Base Core custom name | The map always labels a base's Core building "Base Core", ignoring any custom name the owning player set for it. BetterMap resolves that custom name and displays it as a second line: `Base Core\n<CustomName>`. |
 
-## Quick start
+The rename is applied when a Base Core marker is first created (e.g. on map open / marker replication). A rename made to a base while its marker is already on the open map is not yet picked up live — see [PluginDevelopment.md](PluginDevelopment.md) if you're extending this.
 
-1. **Download `dwmapi.dll`** from the [latest release](../../releases/latest) — pick Client or Server depending on your target
-2. **Clone this repo**
-3. **Copy `ExamplePlugin/` to a new folder**, rename it, and update the project name/GUID in the `.vcxproj`
-4. **Add your project to `StarRupture-Plugin-SDK.sln`** (or create your own `.sln`)
-5. **Build** using Visual Studio 2022 with the `Client Release` or `Server Release` configuration
-6. Drop your `.dll` into `Binaries\Win64\Plugins\` alongside `dwmapi.dll` and launch the game
+---
 
-See [PluginDevelopment.md](PluginDevelopment.md) for the complete API reference, hook list, config system, pattern scanner, and ImGui integration.
+## Configuration
 
-## Build configurations
+Config is stored in `Plugins\config\BetterMap.ini` and is generated on first launch.
 
-| Configuration | Target | Defines |
-|---|---|---|
-| `Client Debug` / `Client Release` | Game client | `MODLOADER_CLIENT_BUILD` |
-| `Server Debug` / `Server Release` | Dedicated server | `MODLOADER_SERVER_BUILD` |
-| `Debug` / `Release` | Generic (no SDK-specific APIs) | — |
+| Setting | Description |
+|---|---|
+| `Enabled` | `0` or `1` — enables the plugin |
 
-Client builds have access to Input, UI panel, and HUD hooks. These interfaces are `nullptr` on server builds, so guard any client-only code with `#if defined(MODLOADER_CLIENT_BUILD)`.
+---
 
-Network channel (`hooks->Network`) is available on both client and server builds; it is `nullptr` on generic builds. Use `plugin_network_helpers.h` for typed packet send/receive rather than calling `IPluginNetworkChannel` directly.
+## Installation
 
-## Runtime DLL
+1. Download the latest release ZIP from the [Releases](../../releases) page.
+2. Extract into your game's `Binaries\Win64\` folder. The ZIP contains a `Plugins\` folder — it will sit alongside your existing `dwmapi.dll`.
+3. After the first launch, edit `Plugins\config\BetterMap.ini` and set `Enabled=1`.
 
-`dwmapi.dll` is the modloader itself. It is **not** built from this repo. Pre-built binaries are attached to each [release](../../releases/latest).
+> **Requires [StarRupture-ModLoader](https://github.com/AlienXAXS/StarRupture-ModLoader)** to be installed first.
 
-Do **not** fork or build the main modloader repo just to develop a plugin — this SDK repo is the intended starting point.
+---
 
-## Plugin structure (v19+)
+## Troubleshooting
 
-`PluginInit` now receives a single `IPluginSelf*` instead of four separate pointers:
+| Problem | Solution |
+|---|---|
+| Base Core still shows the default name | Confirm `Enabled=1` is set in `Plugins\config\BetterMap.ini`. Also check `modloader.log` for `[BetterMap]` trace/debug lines showing whether the custom-name lookup or marker match failed. |
+| Plugin not loading | Check `modloader.log` in `Binaries\Win64\` for errors. |
 
-```cpp
-extern "C" __declspec(dllexport) bool PluginInit(IPluginSelf* self)
-{
-    g_self = self; // store — pointer is stable for the plugin's lifetime
+---
 
-    self->logger->Info(self, "Hello from %s", self->name);
-    self->config->InitializeFromSchema(self, &MY_SCHEMA);
-    self->hooks->Engine->RegisterOnInit(OnEngineInit);
-    return true;
-}
-```
+## Building from Source
 
-`IPluginSelf` bundles everything your plugin needs:
+Requires Visual Studio 2022 (C++20) and the following sibling checkouts alongside this repo:
 
-| Field | Type | Description |
-|---|---|---|
-| `name` | `const char*` | Plugin name from `PluginInfo` |
-| `version` | `const char*` | Plugin version from `PluginInfo` |
-| `logger` | `IPluginLogger*` | Logging interface |
-| `config` | `IPluginConfig*` | Config read/write interface |
-| `scanner` | `IPluginScanner*` | Memory pattern scanner |
-| `hooks` | `IPluginHooks*` | All hook and event sub-interfaces |
+- [StarRupture-Plugin-SDK](https://github.com/AlienXAXS/StarRupture-Plugin-SDK) (plugin API headers)
+- A local `StarRupture-Game-SDK` checkout (Dumper-7 generated UE5 SDK headers, Client + Server)
 
-The `ExamplePlugin/` files demonstrate the full pattern.
+Clone the repo, open `StarRupture-Plugin-BetterMap.sln`, and build the `Client Release|x64` configuration. The output DLL is placed in `build\Client Release\Plugins\`.
 
-## Interface versioning
+See [PluginDevelopment.md](PluginDevelopment.md) for the full plugin API reference, hook list, config system, and pattern scanner.
 
-This SDK tracks the current `PLUGIN_INTERFACE_VERSION_MAX` from the modloader. The `PluginInfo` struct your plugin returns must set `interfaceVersion` to `PLUGIN_INTERFACE_VERSION` (defined in `plugin_interface.h`) or the modloader will refuse to load it.
+---
 
-The SDK repo is updated alongside each modloader release.
+## Disclaimer
+
+Use at your own risk. The authors are not responsible for any damage caused by using this software.
