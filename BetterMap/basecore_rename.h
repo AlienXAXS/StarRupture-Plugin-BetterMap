@@ -50,6 +50,10 @@ namespace BetterMap::BaseCoreRename
 	inline ReplicationHelperCtor_t         g_replicationHelperCtor      = nullptr;
 	inline GetNameByReplicationHelper_t    g_getNameByReplicationHelper = nullptr;
 
+	// Filled in by ResolvePatterns during OnPluginLoadHooks; 0 means that pattern
+	// missed on this build and the feature behind it degrades.
+	inline uintptr_t g_addrCreateBuildingMarker = 0;
+
 	// Resolves a building's current custom name directly from its replicated Mass
 	// entity handle -- no AActor lookup required. Mirrors the dispatch logic inside
 	// UCrBuildingCustomNameSubsystem::GetBuildingCustomName(AActor*), minus the
@@ -146,17 +150,53 @@ namespace BetterMap::BaseCoreRename
 		return g_originalCreateBuildingMarker(self, Data);
 	}
 
+	// All three addresses below are function entries -- one gets a detour, the
+	// other two are called directly -- so each request declares
+	// PLUGIN_SCAN_FUNCTION_START. The loader checks that against the
+	// executable's exception directory, which is what separates "the bytes
+	// matched" from "the bytes matched the right function".
+	inline uintptr_t ResolveFunction(IPluginSelf* self, IPluginHookScanner* scanner,
+		const char* hookName, const char* pattern)
+	{
+		PluginScanRequest req = PLUGIN_SCAN_REQUEST_INIT;
+		req.hookName = hookName;
+		req.pattern  = pattern;
+		req.kind     = PLUGIN_SCAN_FUNCTION_START;
+		req.flags    = PLUGIN_SCAN_FLAG_OPTIONAL;
+
+		return scanner->Resolve(self, &req);
+	}
+
+	// Resolve every AOB this module needs. Callable only from the plugin's
+	// OnPluginLoadHooks export -- the loader refuses scans made anywhere else, and
+	// nothing may be detoured until PluginInit.
+	inline void ResolvePatterns(IPluginSelf* self, IPluginHookScanner* scanner)
+	{
+		if (!self || !scanner)
+			return;
+
+		// Optional throughout: a miss degrades Base Core renaming but leaves the
+		// rest of BetterMap working, which is what the old scan-at-init path did.
+		g_addrCreateBuildingMarker = ResolveFunction(self, scanner,
+			"UCrUW_MapMenuMapArea::CreateBuildingMarker", CreateBuildingMarkerPattern);
+
+		if (uintptr_t ctorAddr = ResolveFunction(self, scanner,
+				"FCrMassEntityReplicationHelper::FCrMassEntityReplicationHelper", ReplicationHelperCtorPattern))
+			g_replicationHelperCtor = reinterpret_cast<ReplicationHelperCtor_t>(ctorAddr);
+
+		if (uintptr_t getNameAddr = ResolveFunction(self, scanner,
+				"UCrBuildingCustomNameSubsystem::GetBuildingCustomNameByReplicationHelper", GetNameByReplicationHelperPattern))
+			g_getNameByReplicationHelper = reinterpret_cast<GetNameByReplicationHelper_t>(getNameAddr);
+	}
+
 	inline void InstallHooks()
 	{
-		LOG_DEBUG("[BetterMap] Scanning for UCrUW_MapMenuMapArea::CreateBuildingMarker...");
-
-		uintptr_t addr = GetScanner()->FindPatternInMainModule(CreateBuildingMarkerPattern);
+		uintptr_t addr = g_addrCreateBuildingMarker;
 		if (!addr)
 		{
-			LOG_ERROR("[BetterMap] Failed to find UCrUW_MapMenuMapArea::CreateBuildingMarker pattern");
+			LOG_ERROR("[BetterMap] UCrUW_MapMenuMapArea::CreateBuildingMarker unresolved");
 			return;
 		}
-		LOG_DEBUG("[BetterMap] CreateBuildingMarker pattern matched at 0x%llX", addr);
 
 		g_createBuildingMarkerHook = GetHooks()->Hooks->Install(addr, (void*)&CreateBuildingMarkerDetour, (void**)&g_originalCreateBuildingMarker);
 		if (!g_createBuildingMarkerHook)
@@ -167,23 +207,11 @@ namespace BetterMap::BaseCoreRename
 
 		LOG_INFO("[BetterMap] CreateBuildingMarker hook installed at 0x%llX", addr);
 
-		uintptr_t ctorAddr = GetScanner()->FindPatternInMainModule(ReplicationHelperCtorPattern);
-		if (ctorAddr)
-		{
-			g_replicationHelperCtor = reinterpret_cast<ReplicationHelperCtor_t>(ctorAddr);
-			LOG_DEBUG("[BetterMap] FCrMassEntityReplicationHelper::FCrMassEntityReplicationHelper pattern matched at 0x%llX", ctorAddr);
-		}
-		else
-			LOG_ERROR("[BetterMap] Failed to find FCrMassEntityReplicationHelper::FCrMassEntityReplicationHelper pattern -- Base Core renaming will be disabled");
+		if (!g_replicationHelperCtor)
+			LOG_ERROR("[BetterMap] FCrMassEntityReplicationHelper::FCrMassEntityReplicationHelper unresolved -- Base Core renaming will be disabled");
 
-		uintptr_t getNameAddr = GetScanner()->FindPatternInMainModule(GetNameByReplicationHelperPattern);
-		if (getNameAddr)
-		{
-			g_getNameByReplicationHelper = reinterpret_cast<GetNameByReplicationHelper_t>(getNameAddr);
-			LOG_DEBUG("[BetterMap] UCrBuildingCustomNameSubsystem::GetBuildingCustomNameByReplicationHelper pattern matched at 0x%llX", getNameAddr);
-		}
-		else
-			LOG_ERROR("[BetterMap] Failed to find UCrBuildingCustomNameSubsystem::GetBuildingCustomNameByReplicationHelper pattern -- Base Core renaming will be disabled");
+		if (!g_getNameByReplicationHelper)
+			LOG_ERROR("[BetterMap] UCrBuildingCustomNameSubsystem::GetBuildingCustomNameByReplicationHelper unresolved -- Base Core renaming will be disabled");
 
 		if (g_replicationHelperCtor && g_getNameByReplicationHelper)
 			LOG_INFO("[BetterMap] Base Core custom-name resolution ready");

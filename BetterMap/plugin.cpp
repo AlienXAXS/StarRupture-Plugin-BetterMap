@@ -3,7 +3,7 @@
 #include "plugin_config.h"
 #include "basecore_rename.h"
 
-// Global plugin self pointer — stable for the plugin's lifetime, retained from PluginInit
+// Global plugin self pointer -- stable for the plugin's lifetime, retained from PluginInit
 static IPluginSelf* g_self = nullptr;
 
 IPluginSelf* GetSelf() { return g_self; }
@@ -29,9 +29,18 @@ extern "C" {
 		return &s_pluginInfo;
 	}
 
+	// Runs after GetPluginInfo and before PluginInit, and is the only context in
+	// which the loader lets a plugin pattern scan. Resolve here, install from
+	// PluginInit -- self->hooks is null for the duration of this event.
+	__declspec(dllexport) void OnPluginLoadHooks(IPluginSelf* self, IPluginHookScanner* scanner)
+	{
+		g_self = self;
+		BetterMap::BaseCoreRename::ResolvePatterns(self, scanner);
+	}
+
 	__declspec(dllexport) bool PluginInit(IPluginSelf* self)
 	{
-		// Store the plugin self pointer — valid for the plugin's entire lifetime
+		// Store the plugin self pointer -- valid for the plugin's entire lifetime
 		g_self = self;
 
 		LOG_INFO("Plugin initializing...");
