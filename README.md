@@ -1,5 +1,7 @@
 # BetterMap — StarRupture Client Plugin
 
+> **Deprecated.** StarRupture now covers what this plugin did, so it is no longer maintained and does not load on the current game build. The source stays here for reference.
+
 Alters how things are displayed on the in-game map for the [StarRupture](https://store.steampowered.com/app/1631270/StarRupture/) [ModLoader](https://github.com/AlienXAXS/StarRupture-ModLoader), by hooking the game's own map UI functions rather than patching assets.
 
 **Target:** Game client only
